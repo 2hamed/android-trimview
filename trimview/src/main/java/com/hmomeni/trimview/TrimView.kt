@@ -24,6 +24,10 @@ class TrimView : View {
         color = Color.WHITE
         isAntiAlias = true
     }
+    private val glassPaint = Paint().apply {
+        color = Color.parseColor("#33ffffff")
+        isAntiAlias = true
+    }
     private val greenPaint = Paint().apply {
         color = Color.GREEN
         isAntiAlias = true
@@ -43,72 +47,77 @@ class TrimView : View {
     private val leftAnchor = RectF()
     private val rightAnchor = RectF()
     private val mainLineHeight = dpToPx(8)
-    val anchorWidth = dpToPx(24).toFloat()
+    private val anchorWidth = dpToPx(24).toFloat()
     private val radius = dpToPx(5).toFloat()
+
+    var max: Int = 100
 
     var progress = 0
         set(value) {
-            if (value > 100) {
-                throw RuntimeException("progress must not exceed 100")
+            if (value > max) {
+                throw RuntimeException("progress must not exceed max($max)")
             }
             field = value
-            progressLine.right = anchorWidth + (trimWidth * progress / 100f)
+            progressLine.right = anchorWidth + (trim * progress / 100f)
             invalidate()
         }
 
-    var trimWidth: Int = dpToPx(150)
+    var trim: Int = max / 3
         set(value) {
             field = value
-            requestLayout()
+            mainLine.right = trim.toFloat() * measuredWidth.toFloat() / max.toFloat()
+            rightAnchor.left = mainLine.right + anchorWidth
+            invalidate()
         }
+    var minTrim: Int = 0
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         setMeasuredDimension(measuredWidth, anchorWidth.toInt())
         if (measuredWidth > 0 && measuredHeight > 0) {
             bgLine.set(
-                0f,
+                anchorWidth,
                 (measuredHeight / 2f) - (mainLineHeight / 2),
-                measuredWidth.toFloat(),
+                measuredWidth.toFloat() - anchorWidth,
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
             mainLine.set(
                 anchorWidth,
                 (measuredHeight / 2f) - (mainLineHeight / 2),
-                trimWidth - anchorWidth,
+                trim.toFloat() * (measuredWidth.toFloat() - anchorWidth) / max.toFloat(),
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
             progressLine.set(
                 anchorWidth,
                 (measuredHeight / 2f) - (mainLineHeight / 2),
-                anchorWidth + (trimWidth * progress / 100f),
+                anchorWidth + (trim * progress / 100f),
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
             leftAnchor.set(0f, 0f, measuredHeight.toFloat(), measuredHeight.toFloat())
             rightAnchor.set(
-                trimWidth - anchorWidth,
+                mainLine.right,
                 0f,
-                trimWidth.toFloat(),
+                mainLine.right + anchorWidth,
                 measuredHeight.toFloat()
             )
         }
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawRect(bgLine, bgPaint)
+        canvas.drawRoundRect(bgLine, radius, radius, bgPaint)
         canvas.drawRect(mainLine, whitePaint)
-        canvas.drawRoundRect(leftAnchor, radius, radius, whitePaint)
-        canvas.drawRoundRect(rightAnchor, radius, radius, whitePaint)
+        canvas.drawRoundRect(leftAnchor, radius, radius, glassPaint)
+        canvas.drawRoundRect(rightAnchor, radius, radius, glassPaint)
         canvas.drawRect(progressLine, greenPaint)
         canvas.drawText("[", leftAnchor.centerX() - anchorWidth / 2, leftAnchor.centerY() + anchorWidth, bracketPaint)
         canvas.drawText("]", rightAnchor.centerX() - anchorWidth / 2, rightAnchor.centerY() + anchorWidth, bracketPaint)
     }
 
-    var captured: Captured = Captured.WHOLE
+    private var captured: Captured = Captured.WHOLE
 
-    var initx = 0f
-    var initrx = 0f
-    var initlx = 0f
+    private var initx = 0f
+    private var initrx = 0f
+    private var initlx = 0f
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
@@ -134,27 +143,39 @@ class TrimView : View {
                 when (captured) {
                     Captured.LEFT -> {
                         val newx = initlx + dx
-                        leftAnchor.left = newx
-                        leftAnchor.right = leftAnchor.left + anchorWidth
-                        mainLine.left = leftAnchor.right
-                        invalidate()
+                        if (
+                            max * (rightAnchor.left - newx - anchorWidth) / (measuredWidth - 2 * anchorWidth) >= minTrim
+                            && newx >= 0
+                        ) {
+                            leftAnchor.left = newx
+                            leftAnchor.right = leftAnchor.left + anchorWidth
+                            mainLine.left = leftAnchor.right
+                            invalidate()
+                        }
                     }
                     Captured.RIGHT -> {
                         val newx = initrx + dx
-                        rightAnchor.left = newx
-                        rightAnchor.right = rightAnchor.left + anchorWidth
-                        mainLine.right = rightAnchor.left
-                        invalidate()
+                        if (
+                            max * (newx - leftAnchor.right) / (measuredWidth - 2 * anchorWidth) >= minTrim
+                            && newx + anchorWidth <= measuredWidth
+                        ) {
+                            rightAnchor.left = newx
+                            rightAnchor.right = rightAnchor.left + anchorWidth
+                            mainLine.right = rightAnchor.left
+                            invalidate()
+                        }
                     }
                     Captured.WHOLE -> {
-                        leftAnchor.left = initlx + dx
-                        leftAnchor.right = leftAnchor.left + anchorWidth
-                        mainLine.left = leftAnchor.right
+                        if (initrx + dx + anchorWidth <= measuredWidth && initlx + dx >= 0) {
+                            leftAnchor.left = initlx + dx
+                            leftAnchor.right = leftAnchor.left + anchorWidth
+                            mainLine.left = leftAnchor.right
 
-                        rightAnchor.left = initrx + dx
-                        rightAnchor.right = rightAnchor.left + anchorWidth
-                        mainLine.right = rightAnchor.left
-                        invalidate()
+                            rightAnchor.left = initrx + dx
+                            rightAnchor.right = rightAnchor.left + anchorWidth
+                            mainLine.right = rightAnchor.left
+                            invalidate()
+                        }
                     }
                 }
             }

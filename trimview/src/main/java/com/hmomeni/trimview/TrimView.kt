@@ -108,6 +108,7 @@ class TrimView : View {
 
     var initx = 0f
     var initrx = 0f
+    var initlx = 0f
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
@@ -118,28 +119,42 @@ class TrimView : View {
                         Captured.RIGHT
                     }
                     leftAnchor.contains(event.x, event.y) -> {
-                        initrx = leftAnchor.left
+                        initlx = leftAnchor.left
                         Captured.LEFT
                     }
-                    else -> Captured.WHOLE
+                    else -> {
+                        initrx = rightAnchor.left
+                        initlx = leftAnchor.left
+                        Captured.WHOLE
+                    }
                 }
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - initx
-                val newx = initrx + dx
                 when (captured) {
                     Captured.LEFT -> {
+                        val newx = initlx + dx
                         leftAnchor.left = newx
                         leftAnchor.right = leftAnchor.left + anchorWidth
+                        mainLine.left = leftAnchor.right
                         invalidate()
                     }
                     Captured.RIGHT -> {
+                        val newx = initrx + dx
                         rightAnchor.left = newx
                         rightAnchor.right = rightAnchor.left + anchorWidth
+                        mainLine.right = rightAnchor.left
                         invalidate()
                     }
                     Captured.WHOLE -> {
+                        leftAnchor.left = initlx + dx
+                        leftAnchor.right = leftAnchor.left + anchorWidth
+                        mainLine.left = leftAnchor.right
 
+                        rightAnchor.left = initrx + dx
+                        rightAnchor.right = rightAnchor.left + anchorWidth
+                        mainLine.right = rightAnchor.left
+                        invalidate()
                     }
                 }
             }

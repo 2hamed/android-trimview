@@ -32,4 +32,6 @@ dependencies {
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
 
     implementation project(':trimview')
+
+    implementation 'com.jakewharton.timber:timber:4.7.1'
 }

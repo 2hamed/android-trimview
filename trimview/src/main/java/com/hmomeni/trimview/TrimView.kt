@@ -6,10 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
-import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import timber.log.Timber
 
 class TrimView : View {
     constructor(context: Context) : super(context)
@@ -35,11 +35,7 @@ class TrimView : View {
     }
     private val bracketPaint = Paint().apply {
         color = Color.BLACK
-        textSize = dpToPx(14).toFloat()
-        isAntiAlias = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            textAlignment = View.TEXT_ALIGNMENT_CENTER
-        }
+        textSize = dpToPx(15).toFloat()
     }
     private val bgLine = RectF()
     private val mainLine = RectF()
@@ -56,39 +52,40 @@ class TrimView : View {
 
     var progress = 0
         set(value) {
-            if (value > max) {
-                throw RuntimeException("progress must not exceed max($max)")
+            if (value > trim) {
+                throw RuntimeException("progress must not exceed max ($trim)")
             }
             field = value
-            progressLine.right = anchorWidth + (trim * progress / 100f)
+            calculateProgress()
             invalidate()
         }
 
     var trim: Int = max / 3
         set(value) {
             field = value
-            mainLine.right = trim.toFloat() * measuredWidth.toFloat() / max.toFloat()
-            rightAnchor.left = mainLine.right + anchorWidth
-            invalidate()
+            calculateLeftandRight()
         }
     var trimStart: Int = 0
     var minTrim: Int = 0
     var maxTrim: Int = max
 
+    private var maxPx = 0
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         setMeasuredDimension(measuredWidth, anchorWidth.toInt())
         if (measuredWidth > 0 && measuredHeight > 0) {
+            maxPx = (measuredWidth - (2 * anchorWidth)).toInt()
             bgLine.set(
                 anchorWidth,
                 (measuredHeight / 2f) - (mainLineHeight / 2),
-                measuredWidth.toFloat() - anchorWidth,
+                anchorWidth + maxPx,
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
             mainLine.set(
                 anchorWidth,
                 (measuredHeight / 2f) - (mainLineHeight / 2),
-                trim.toFloat() * (measuredWidth.toFloat() - anchorWidth) / max.toFloat(),
+                anchorWidth + (trim * maxPx / max).toFloat(),
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
             progressLine.set(
@@ -97,7 +94,7 @@ class TrimView : View {
                 anchorWidth + (trim * progress / 100f),
                 (measuredHeight / 2f) + (mainLineHeight / 2)
             )
-            leftAnchor.set(0f, 0f, measuredHeight.toFloat(), measuredHeight.toFloat())
+            leftAnchor.set(0f, 0f, anchorWidth, measuredHeight.toFloat())
             rightAnchor.set(
                 mainLine.right,
                 0f,
@@ -108,13 +105,15 @@ class TrimView : View {
     }
 
     override fun onDraw(canvas: Canvas) {
+        canvas.save()
         canvas.drawRoundRect(bgLine, radius, radius, bgPaint)
         canvas.drawRect(mainLine, whitePaint)
-        canvas.drawRoundRect(leftAnchor, radius, radius, glassPaint)
-        canvas.drawRoundRect(rightAnchor, radius, radius, glassPaint)
+        canvas.drawRoundRect(leftAnchor, radius, radius, whitePaint)
+        canvas.drawRoundRect(rightAnchor, radius, radius, whitePaint)
         canvas.drawRect(progressLine, greenPaint)
-//        canvas.drawText("[", leftAnchor.centerX() - anchorWidth / 2, leftAnchor.centerY() + anchorWidth, bracketPaint)
-//        canvas.drawText("]", rightAnchor.centerX() - anchorWidth / 2, rightAnchor.centerY() + anchorWidth, bracketPaint)
+        canvas.drawText("[", leftAnchor.centerX(), leftAnchor.bottom - anchorWidth / 3, bracketPaint)
+        canvas.drawText("]", rightAnchor.centerX(), rightAnchor.bottom - anchorWidth / 3, bracketPaint)
+        canvas.restore()
     }
 
     private var captured: Captured = Captured.WHOLE
@@ -151,25 +150,26 @@ class TrimView : View {
                 when (captured) {
                     Captured.LEFT -> {
                         val newx = initlx + dx
+                        val newTrimStart = initTrimStart + (dx * max / (maxPx)).toInt()
+                        val newTrim = initTrim - newTrimStart + initTrimStart
                         if (
-                            max * (rightAnchor.left - newx - anchorWidth) / (measuredWidth - 2 * anchorWidth) >= minTrim
-                            && max * (rightAnchor.left - newx - anchorWidth) / (measuredWidth - 2 * anchorWidth) <= maxTrim
+                            newTrim in minTrim..maxTrim
                             && newx >= 0
                         ) {
-                            trimStart = initTrimStart + (dx * max / (measuredWidth - 2 * anchorWidth)).toInt()
-                            trim = initTrim - trimStart + initTrimStart
+                            trimStart = newTrimStart
+                            trim = newTrim
                             calculateLeftandRight()
                             onTrimChangeListener?.onLeftEdgeChanged(trimStart, trim)
                         }
                     }
                     Captured.RIGHT -> {
                         val newx = initrx + dx
+                        val newTrim = initTrim + (dx * max / (maxPx)).toInt()
                         if (
-                            max * (newx - leftAnchor.right) / (measuredWidth - 2 * anchorWidth) >= minTrim
-                            && max * (newx - leftAnchor.right) / (measuredWidth - 2 * anchorWidth) <= maxTrim
+                            newTrim in minTrim..maxTrim
                             && newx + anchorWidth <= measuredWidth
                         ) {
-                            trim = initTrim + (dx * max / (measuredWidth - 2 * anchorWidth)).toInt()
+                            trim = newTrim
                             calculateLeftandRight()
                             onTrimChangeListener?.onRightEdgeChanged(trimStart, trim)
                         }
@@ -188,19 +188,39 @@ class TrimView : View {
         return true
     }
 
-    private fun calculateLeftandRight() {
-        val trimStartPx = trimStart * (measuredWidth - 2 * anchorWidth) / max
-        val trimPx = trim * (measuredWidth - 2 * anchorWidth) / max
-        leftAnchor.left = trimStartPx
+    private fun calculateLeftandRight(invalidate: Boolean = true) {
+        val trimStartPx = trimStart * maxPx / max
+        val trimPx = trim * maxPx / max
+
+        leftAnchor.left = trimStartPx.toFloat()
         leftAnchor.right = leftAnchor.left + anchorWidth
         mainLine.left = leftAnchor.right
 
-        rightAnchor.left = trimStartPx + trimPx
+        rightAnchor.left = (trimStartPx + trimPx).toFloat() + anchorWidth
         rightAnchor.right = rightAnchor.left + anchorWidth
         mainLine.right = rightAnchor.left
 
-        invalidate()
+        calculateProgress(false)
 
+        report()
+
+        if (invalidate)
+            invalidate()
+    }
+
+    private fun calculateProgress(invalidate: Boolean = true) {
+        val progressPx = progress * maxPx / max
+        progressLine.left = mainLine.left
+        progressLine.right = progressLine.left + progressPx
+
+        report()
+
+        if (invalidate)
+            invalidate()
+    }
+
+    private fun report() {
+        Timber.d("trimStart=%d, trim=%d, progress=%d", trimStart, trim, progress)
     }
 
     enum class Captured {
@@ -214,4 +234,5 @@ class TrimView : View {
     }
 
     private fun dpToPx(dp: Int) = (dp * Resources.getSystem().displayMetrics.density).toInt()
+
 }

@@ -6,10 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import timber.log.Timber
 
 class TrimView : View {
     constructor(context: Context) : super(context)
@@ -24,10 +24,6 @@ class TrimView : View {
         color = Color.WHITE
         isAntiAlias = true
     }
-    private val glassPaint = Paint().apply {
-        color = Color.parseColor("#33ffffff")
-        isAntiAlias = true
-    }
     private val greenPaint = Paint().apply {
         color = Color.GREEN
         isAntiAlias = true
@@ -35,7 +31,11 @@ class TrimView : View {
     }
     private val bracketPaint = Paint().apply {
         color = Color.BLACK
-        textSize = dpToPx(15).toFloat()
+        textSize = dpToPx(14).toFloat()
+        isAntiAlias = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+        }
     }
     private val bgLine = RectF()
     private val mainLine = RectF()
@@ -46,15 +46,12 @@ class TrimView : View {
     private val anchorWidth = dpToPx(24).toFloat()
     private val radius = dpToPx(5).toFloat()
 
-    var onTrimChangeListener: TrimView.TrimChangeListener? = null
+    var onTrimChangeListener: TrimChangeListener? = null
 
     var max: Int = 100
 
     var progress = 0
         set(value) {
-            if (value > trim) {
-                throw RuntimeException("progress must not exceed max ($trim)")
-            }
             field = value
             calculateProgress()
             invalidate()
@@ -105,15 +102,13 @@ class TrimView : View {
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.save()
         canvas.drawRoundRect(bgLine, radius, radius, bgPaint)
         canvas.drawRect(mainLine, whitePaint)
         canvas.drawRoundRect(leftAnchor, radius, radius, whitePaint)
         canvas.drawRoundRect(rightAnchor, radius, radius, whitePaint)
         canvas.drawRect(progressLine, greenPaint)
-        canvas.drawText("[", leftAnchor.centerX(), leftAnchor.bottom - anchorWidth / 3, bracketPaint)
-        canvas.drawText("]", rightAnchor.centerX(), rightAnchor.bottom - anchorWidth / 3, bracketPaint)
-        canvas.restore()
+        canvas.drawText("[", leftAnchor.left + anchorWidth * 2 / 5, leftAnchor.bottom - anchorWidth / 3, bracketPaint)
+        canvas.drawText("]", rightAnchor.left + anchorWidth * 2 / 5, rightAnchor.bottom - anchorWidth / 3, bracketPaint)
     }
 
     private var captured: Captured = Captured.WHOLE
@@ -123,6 +118,7 @@ class TrimView : View {
     private var initx = 0f
     private var initrx = 0f
     private var initlx = 0f
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
@@ -144,6 +140,7 @@ class TrimView : View {
                         Captured.WHOLE
                     }
                 }
+                onTrimChangeListener?.onDragStarted(trimStart, trim)
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - initx
@@ -170,6 +167,9 @@ class TrimView : View {
                             && newx + anchorWidth <= measuredWidth
                         ) {
                             trim = newTrim
+                            if (progress > trim) {
+                                progress = trim
+                            }
                             calculateLeftandRight()
                             onTrimChangeListener?.onRightEdgeChanged(trimStart, trim)
                         }
@@ -182,6 +182,9 @@ class TrimView : View {
                         }
                     }
                 }
+            }
+            MotionEvent.ACTION_UP -> {
+                onTrimChangeListener?.onDragStopped(trimStart, trim)
             }
         }
 
@@ -202,8 +205,6 @@ class TrimView : View {
 
         calculateProgress(false)
 
-        report()
-
         if (invalidate)
             invalidate()
     }
@@ -213,14 +214,8 @@ class TrimView : View {
         progressLine.left = mainLine.left
         progressLine.right = progressLine.left + progressPx
 
-        report()
-
         if (invalidate)
             invalidate()
-    }
-
-    private fun report() {
-        Timber.d("trimStart=%d, trim=%d, progress=%d", trimStart, trim, progress)
     }
 
     enum class Captured {
@@ -228,9 +223,11 @@ class TrimView : View {
     }
 
     abstract class TrimChangeListener {
+        open fun onDragStarted(trimStart: Int, trim: Int) {}
         open fun onLeftEdgeChanged(trimStart: Int, trim: Int) {}
         open fun onRightEdgeChanged(trimStart: Int, trim: Int) {}
         open fun onRangeChanged(trimStart: Int, trim: Int) {}
+        open fun onDragStopped(trimStart: Int, trim: Int) {}
     }
 
     private fun dpToPx(dp: Int) = (dp * Resources.getSystem().displayMetrics.density).toInt()

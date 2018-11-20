@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
                 trimView.progress = 0
             }
         }
-//        timer()
+        timer()
     }
 
     private val handler = Handler()

@@ -4,4 +4,4 @@ TrimView is a custom view library which is basically a double-sided ProgressBar 
 
 ### Demo
 
-![TrimView.gif](TrimView.gif)
+![TrimView.gif](TrimView.gif | width=400)

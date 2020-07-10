@@ -1,16 +1,20 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
+ext {
+    PUBLISH_GROUP_ID = 'com.hmomeni.trimview'
+    PUBLISH_ARTIFACT_ID = 'trimview'
+    PUBLISH_VERSION = '0.1.0'
+    PUBLISH_VERSION_CODE = 1
+}
+
 android {
     compileSdkVersion 28
-
-
-
     defaultConfig {
         minSdkVersion 16
         targetSdkVersion 28
         versionCode 1
-        versionName "1.0"
+        versionName "0.1.0"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
@@ -23,6 +27,16 @@ android {
         }
     }
 
+}
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.github.dcendents:android-maven-gradle-plugin:1.4.1'
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.7.3'
+    }
 }
 
 dependencies {
@@ -39,3 +53,4 @@ dependencies {
 repositories {
     mavenCentral()
 }
+apply from: './install.gradle'
